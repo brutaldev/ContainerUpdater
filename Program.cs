@@ -309,7 +309,7 @@ static async Task ExecuteAsync(Options options)
     }
     else
     {
-      Console.ForegroundColor = ConsoleColor.Yellow;
+      Console.ForegroundColor = ConsoleColor.Green;
       Console.WriteLine();
       Console.WriteLine("Nothing to update :)");
       Console.WriteLine();
@@ -320,14 +320,17 @@ static async Task ExecuteAsync(Options options)
   {
     if (connected)
     {
-      Console.WriteLine(ex.Message);
+      Console.ForegroundColor = ConsoleColor.Red;
+      Console.WriteLine();
+      Console.WriteLine(ex.ToString());
+      Console.ResetColor();
 
       exitCode = 1;
     }
     else
     {
       Console.ForegroundColor = ConsoleColor.Yellow;
-      Console.WriteLine("Docker is not running :(");
+      Console.WriteLine("Docker engine is not running :(");
       Console.ResetColor();
 
       exitCode = 2;

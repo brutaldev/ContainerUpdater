@@ -5,13 +5,37 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AssemblyVersion>1.0.0.1</AssemblyVersion>
-    <PublishSingleFile>true</PublishSingleFile>
+    <AssemblyVersion>1.0.1.0</AssemblyVersion>
+    <Version>1.0.1.0</Version>
     <ApplicationIcon>icon.ico</ApplicationIcon>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>ContainerUpdater</ToolCommandName>
+    <Authors>Werner van Deventer</Authors>
+    <Copyright>Copyright (c) Werner van Deventer 2025</Copyright>
+    <Description>Automate updating Docker images and the containers that use them.</Description>
+    <RepositoryUrl>https://github.com/brutaldev/ContainerUpdater</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/brutaldev/ContainerUpdater</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>docker, registry, devops, automation, docker-container, docker-image</PackageTags>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageOutputPath>./dist</PackageOutputPath>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ReleaseNotes>First version.</ReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
     <Content Include="icon.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="icon.png">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+    <None Include="README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
   </ItemGroup>
 
   <ItemGroup>

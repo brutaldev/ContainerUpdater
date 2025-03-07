@@ -1,21 +1,29 @@
-﻿<div align="center">
-
-![ICON](icon_small.png)
+﻿![ICON](https://raw.githubusercontent.com/brutaldev/ContainerUpdater/main/icon_small.png)
 	
 # Container Updater
-
-</div>
 
 Automate updating Docker images and the containers that use them.
 
 Updating Docker images in-place is a surprisingly complex task that requires multiple steps which are both time consuming and error prone if done manually.
 Container Updater completely automates this process in the simplest way possible (just run it).
 
+Container Updater is available as a .NET Core Global Tool:
+
+```bash
+ dotnet tool install --global ContainerUpdater
+```
+
+The latest version can also be downloaded directly from NuGet.org at:
+https://www.nuget.org/packages/ContainerUpdater
+
+If you don't have .NET installed you can download the latest version for your operating system here:
+https://github.com/brutaldev/ContainerUpdater/releases/latest
+
 ### Options
 
 If you want to see if there are any updates and what will happen but don't want to make any changes you can use the `--dry-run` option.
 
-```sh
+```bash
 ContainerUpdater --dry-run
 ```
 
@@ -58,4 +66,4 @@ Container Updater also provides the following:
 - [ ] Support updating a remote docker host
 - [ ] Export container settings to recover from failures
 - [ ] Add cross-platform UI to run in the system tray
-- [ ] Deploy as a .NET global tool
+- [x] Deploy as a .NET global tool
