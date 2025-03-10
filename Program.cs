@@ -1,4 +1,5 @@
 ﻿using System.Reflection;
+using Captin.ConsoleIntercept;
 using CommandLine;
 using ContainerUpdater;
 using Docker.DotNet;
@@ -40,6 +41,7 @@ static async Task ExecuteAsync(Options options)
     Console.ResetColor();
   }
 
+  using var consoleOut = ConsoleOut.Observe();
   using var dockerClient = new DockerClientConfiguration().CreateClient();
   var connected = false;
   var exitCode = 0;
@@ -253,16 +255,24 @@ static async Task ExecuteAsync(Options options)
 
         try
         {
-          Console.WriteLine($"Removing old image {image.OriginalTag} ({image.LocalDigest})");
+          Console.WriteLine($"Removing old image for {image.OriginalTag}");
+          Console.WriteLine(image.LocalDigest);
           if (!options.DryRun)
           {
             await dockerClient.Images.DeleteImageAsync(image.Id, new() { Force = true, NoPrune = true });
           }
 
-          Console.WriteLine($"Pulling new image {image.OriginalTag} ({image.NewDigest})");
+          Console.WriteLine($"Pulling new image for {image.OriginalTag}");
+          Console.WriteLine(image.NewDigest);
           if (!options.DryRun)
           {
             await dockerClient.Images.CreateImageAsync(new() { FromImage = image.OriginalName, Tag = image.Tag }, null, pullProgress);
+            Console.WriteLine();
+            Console.WriteLine();
+          }
+          else
+          {
+            Console.WriteLine("".PadRight(50, '.'));
             Console.WriteLine();
           }
         }
@@ -335,6 +345,10 @@ static async Task ExecuteAsync(Options options)
 
       exitCode = 2;
     }
+  }
+  finally
+  {
+    await File.AppendAllTextAsync("ContainerUpdater.log", $"--- {DateTime.Now:yyyy/MMdd HH:mm:ss} ---{Environment.NewLine}{consoleOut}{Environment.NewLine}");
   }
 
   Environment.Exit(exitCode);

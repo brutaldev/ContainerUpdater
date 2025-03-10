@@ -10,7 +10,7 @@ Container Updater completely automates this process in the simplest way possible
 Container Updater is available as a .NET Core Global Tool:
 
 ```bash
- dotnet tool install --global ContainerUpdater
+dotnet tool install --global ContainerUpdater
 ```
 
 The latest version can also be downloaded directly from NuGet.org at:
@@ -67,3 +67,4 @@ Container Updater also provides the following:
 - [ ] Export container settings to recover from failures
 - [ ] Add cross-platform UI to run in the system tray
 - [x] Deploy as a .NET global tool
+- [x] Write all output to log file
