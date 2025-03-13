@@ -33,14 +33,6 @@ await Parser.Default.ParseArguments<Options>(args).WithParsedAsync(ExecuteAsync)
 
 static async Task ExecuteAsync(Options options)
 {
-  if (options.DryRun)
-  {
-    Console.ForegroundColor = ConsoleColor.Yellow;
-    Console.WriteLine("DRY RUN: No changes will be made to your images or containers");
-    Console.WriteLine();
-    Console.ResetColor();
-  }
-
   using var consoleOut = ConsoleOut.Observe();
   using var dockerClient = new DockerClientConfiguration().CreateClient();
   var connected = false;
@@ -63,6 +55,24 @@ static async Task ExecuteAsync(Options options)
     Console.WriteLine($"API     : {version.APIVersion}");
     Console.WriteLine($"Kernel  : {version.KernelVersion}");
     Console.WriteLine();
+
+    if (options.Exclude.Any())
+    {
+      Console.WriteLine($"EXCLUDE: {string.Join(" ", options.Exclude)}");
+    }
+
+    if (options.Include.Any())
+    {
+      Console.WriteLine($"INCLUDE: {string.Join(" ", options.Include)}");
+    }
+
+    if (options.DryRun)
+    {
+      Console.ForegroundColor = ConsoleColor.Yellow;
+      Console.WriteLine("DRY RUN: No changes will be made to your images or containers");
+      Console.WriteLine();
+      Console.ResetColor();
+    }
 
     // Get all images, parse them and create registry clients.
     foreach (var image in await dockerClient.Images.ListImagesAsync(new() { All = true }))
@@ -124,6 +134,29 @@ static async Task ExecuteAsync(Options options)
     foreach (var image in imagesToCheck)
     {
       Console.Write($"Checking image {image.OriginalTag}... ");
+
+      // Check if the image has been excluded.
+      if (options.Exclude.Contains(image.Repository, StringComparer.OrdinalIgnoreCase) ||
+          image.Repository.Split('/').Any(x => options.Exclude.Contains(x, StringComparer.OrdinalIgnoreCase)))
+      {
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine("EXCLUDED");
+        Console.ResetColor();
+
+        continue;
+      }
+
+      // Check if the image has been included.
+      if (options.Include.Any() &&
+         !options.Include.Contains(image.Repository, StringComparer.OrdinalIgnoreCase) &&
+         !image.Repository.Split('/').Any(x => options.Include.Contains(x, StringComparer.OrdinalIgnoreCase)))
+      {
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine("EXCLUDED");
+        Console.ResetColor();
+
+        continue;
+      }
 
       try
       {

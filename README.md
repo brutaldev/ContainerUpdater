@@ -31,7 +31,19 @@ If you want to pause at certain steps and choose which images to update you can 
 
 ```bash
 ContainerUpdater --interactive
-ContainerUpdater -i
+```
+
+If you want to include or exclude certain repository names from update checks, you can pass them in as a lists using the full . Excluding take precedence over include matches.
+
+```bash
+# Will exclude images from deventerprisesoftware (https://hub.docker.com/u/deventerprisesoftware) and microsoft/garnet.
+ContainerUpdater --exclude deventerprisesoftware garnet
+
+# Include full repository names as well.
+ContainerUpdater --include deventerprisesoftware/html2pdf
+
+# Include only images from Microsoft (https://hub.docker.com/u/microsoft).
+ContainerUpdater --include microsoft
 ```
 
 ### How It Works
@@ -68,7 +80,7 @@ Container Updater also provides the following:
 - [x] Handle multiple digest checks using different content types
 - [x] Restore all attributes as well (compose groups)
 - [x] Support dry run just to check for and show updates
-- [ ] Support adding image names to include/exclude in checks
+- [x] Support adding image names to include/exclude in checks
 - [x] Support selection of images to update (interactive mode)
 - [ ] Support updating a remote docker host
 - [ ] Export container settings to recover from failures
