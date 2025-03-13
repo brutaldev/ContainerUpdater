@@ -5,8 +5,8 @@
     <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AssemblyVersion>1.0.2.0</AssemblyVersion>
-    <Version>1.0.2.0</Version>
+    <AssemblyVersion>1.0.3.0</AssemblyVersion>
+    <Version>1.0.3.0</Version>
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>ContainerUpdater</ToolCommandName>
@@ -22,7 +22,10 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <ReleaseNotes>
       - Support more .NET versions.
-      - Add option for interactive mode.
+      - Add console output to log file.
+      - Add interactive mode.
+      - Add include/exclude filter options.
+      - Add remote host and credentials.
     </ReleaseNotes>
   </PropertyGroup>
 
@@ -45,6 +48,7 @@
     <PackageReference Include="Captin.ConsoleIntercept" Version="2.0.0" />
     <PackageReference Include="CommandLineParser" Version="2.9.1" />
     <PackageReference Include="Docker.DotNet" Version="3.125.15" />
+    <PackageReference Include="Docker.DotNet.BasicAuth" Version="3.125.15" />
   </ItemGroup>
 
 </Project>

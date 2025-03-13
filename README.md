@@ -19,21 +19,27 @@ https://www.nuget.org/packages/ContainerUpdater
 If you don't have .NET installed you can download the latest version for your operating system here:
 https://github.com/brutaldev/ContainerUpdater/releases/latest
 
+![SCREENSHOT](https://raw.githubusercontent.com/brutaldev/ContainerUpdater/main/screenshot.png)
+
 ### Options
 
+#### Dry Run
 If you want to see if there are any updates and what will happen but don't want to make any changes you can use the `--dry-run` option.
 
 ```bash
 ContainerUpdater --dry-run
 ```
 
-If you want to pause at certain steps and choose which images to update you can use interactive mode.
+#### Interactive Mode
+If you want to pause at certain steps and choose which images to update you can use the `--interactive` mode option.
 
 ```bash
 ContainerUpdater --interactive
 ```
 
-If you want to include or exclude certain repository names from update checks, you can pass them in as a lists using the full . Excluding take precedence over include matches.
+#### Include / Exclude
+If you want to include or exclude certain repository names from update checks, you can pass them in as a lists using the organization, image name or full name.
+Excluding takes precedence over include matches.
 
 ```bash
 # Will exclude images from deventerprisesoftware (https://hub.docker.com/u/deventerprisesoftware) and microsoft/garnet.
@@ -44,6 +50,20 @@ ContainerUpdater --include deventerprisesoftware/html2pdf
 
 # Include only images from Microsoft (https://hub.docker.com/u/microsoft).
 ContainerUpdater --include microsoft
+```
+
+#### Remote Host
+Instead of connecting to a local Docker instance, you can connect to a remote host instead using the `--host` option. This needs to be a valid URI.
+
+```bash
+ContainerUpdater --host tcp://127.0.0.1:2375
+```
+
+#### Credentials
+If your Docker instance (local or remote) requires credentials then you can supply those with the `--username` and `--password` options.
+
+```bash
+ContainerUpdater --username admin --password secret_sauce
 ```
 
 ### How It Works
@@ -82,7 +102,7 @@ Container Updater also provides the following:
 - [x] Support dry run just to check for and show updates
 - [x] Support adding image names to include/exclude in checks
 - [x] Support selection of images to update (interactive mode)
-- [ ] Support updating a remote docker host
+- [x] Support updating a remote docker host
 - [ ] Export container settings to recover from failures
 - [ ] Add cross-platform UI to run in the system tray
 - [x] Deploy as a .NET global tool

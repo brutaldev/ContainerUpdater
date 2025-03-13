@@ -3,6 +3,7 @@ using Captin.ConsoleIntercept;
 using CommandLine;
 using ContainerUpdater;
 using Docker.DotNet;
+using Docker.DotNet.BasicAuth;
 using Docker.DotNet.Models;
 
 const string DockerRegistry = "index.docker.io";
@@ -33,8 +34,17 @@ await Parser.Default.ParseArguments<Options>(args).WithParsedAsync(ExecuteAsync)
 
 static async Task ExecuteAsync(Options options)
 {
+  Credentials dockerCredentials = (!string.IsNullOrEmpty(options.Username) || !string.IsNullOrEmpty(options.Password)) ?
+    new BasicAuthCredentials(options.Username, options.Password) :
+    new AnonymousCredentials();
+
+  using var dockerConfiguration = (options.Host is not null) ?
+    new DockerClientConfiguration(options.Host, dockerCredentials) :
+    new DockerClientConfiguration(dockerCredentials);
+
+  using var dockerClient = dockerConfiguration.CreateClient();
+
   using var consoleOut = ConsoleOut.Observe();
-  using var dockerClient = new DockerClientConfiguration().CreateClient();
   var connected = false;
   var exitCode = 0;
 
@@ -50,6 +60,8 @@ static async Task ExecuteAsync(Options options)
     var version = await dockerClient.System.GetVersionAsync();
 
     Console.WriteLine("Docker Client Information");
+    Console.WriteLine("-------------------------");
+    Console.WriteLine($"Host    : {dockerConfiguration.EndpointBaseUri}");
     Console.WriteLine($"OS      : {version.Os} ({version.Arch})");
     Console.WriteLine($"Version : {version.Version}");
     Console.WriteLine($"API     : {version.APIVersion}");
