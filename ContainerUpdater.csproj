@@ -20,7 +20,10 @@
     <PackageIcon>icon.png</PackageIcon>
     <PackageOutputPath>./dist</PackageOutputPath>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <ReleaseNotes>First version.</ReleaseNotes>
+    <ReleaseNotes>
+      - Support more .NET versions.
+      - Add option for interactive mode.
+    </ReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

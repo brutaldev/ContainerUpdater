@@ -27,6 +27,13 @@ If you want to see if there are any updates and what will happen but don't want 
 ContainerUpdater --dry-run
 ```
 
+If you want to pause at certain steps and choose which images to update you can use interactive mode.
+
+```bash
+ContainerUpdater --interactive
+ContainerUpdater -i
+```
+
 ### How It Works
 
 1. Get all the current image digests and tags to perform a manifest lookup.
@@ -62,7 +69,7 @@ Container Updater also provides the following:
 - [x] Restore all attributes as well (compose groups)
 - [x] Support dry run just to check for and show updates
 - [ ] Support adding image names to include/exclude in checks
-- [ ] Support selection of images to update (interactive mode)
+- [x] Support selection of images to update (interactive mode)
 - [ ] Support updating a remote docker host
 - [ ] Export container settings to recover from failures
 - [ ] Add cross-platform UI to run in the system tray

@@ -171,6 +171,32 @@ static async Task ExecuteAsync(Options options)
       // Perform the update on images.
       foreach (var image in imagesToUpdate)
       {
+        if (options.Interactive)
+        {
+          Console.Write($"Update {image.OriginalTag}? [Y/N]: ");
+          var choice = Console.ReadKey(true);
+
+          while (choice.Key != ConsoleKey.Y && choice.Key != ConsoleKey.N)
+          {
+            choice = Console.ReadKey(true);
+          }
+
+          if (choice.Key == ConsoleKey.Y)
+          {
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("Yes");
+            Console.ResetColor();
+          }
+          else if (choice.Key == ConsoleKey.N)
+          {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine("No");
+            Console.ResetColor();
+
+            continue;
+          }
+        }
+
         // Find all containers using the image.
         var containersUsingImage = new List<(string Id, string Name, bool IsRunning, CreateContainerParameters CreateParameters)>();
 
@@ -349,6 +375,13 @@ static async Task ExecuteAsync(Options options)
   finally
   {
     await File.AppendAllTextAsync("ContainerUpdater.log", $"--- {DateTime.Now:yyyy/MMdd HH:mm:ss} ---{Environment.NewLine}{consoleOut}{Environment.NewLine}");
+  }
+
+  if (options.Interactive)
+  {
+    Console.WriteLine();
+    Console.WriteLine("Press any key to exit...");
+    Console.ReadKey(true);
   }
 
   Environment.Exit(exitCode);
