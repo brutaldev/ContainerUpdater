@@ -5,8 +5,8 @@
     <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AssemblyVersion>1.0.3.0</AssemblyVersion>
-    <Version>1.0.3.0</Version>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <Version>1.1.0.0</Version>
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>ContainerUpdater</ToolCommandName>
@@ -21,13 +21,13 @@
     <PackageOutputPath>./dist</PackageOutputPath>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <ReleaseNotes>
-      - Support more .NET versions.
-      - Add console output to log file.
-      - Add interactive mode.
-      - Add include/exclude filter options.
-      - Add remote host and credentials.
+      - Detect tag version number changes.
     </ReleaseNotes>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="ContainerUpdater.slnx" />
+  </ItemGroup>
 
   <ItemGroup>
     <Content Include="icon.ico" />

@@ -107,3 +107,4 @@ Container Updater also provides the following:
 - [ ] Add cross-platform UI to run in the system tray
 - [x] Deploy as a .NET global tool
 - [x] Write all output to log file
+- [x] Detect version numbers and new version tags

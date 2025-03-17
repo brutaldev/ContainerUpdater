@@ -172,21 +172,39 @@ static async Task ExecuteAsync(Options options)
 
       try
       {
-        var remoteDigests = await RegistryManifestHelper.GetDigestsAsync(image.Registry, image.Repository, image.Tag);
+        var remoteDigests = await RegistryHelper.GetDigestsAsync(image.Registry, image.Repository, image.Tag);
 
         if (!remoteDigests.Any(digest => digest == image.LocalDigest))
         {
           Console.ForegroundColor = ConsoleColor.Green;
-          Console.WriteLine("UPDATE AVAILABLE");
+          Console.WriteLine("UPDATE AVAILABLE (DIGEST)");
           Console.ResetColor();
 
           imagesToUpdate.Add((image.Id, image.OriginalName, image.OriginalTag, image.Tag, image.LocalDigest, remoteDigests.First()));
         }
         else
         {
-          Console.ForegroundColor = ConsoleColor.Yellow;
-          Console.WriteLine("NO UPDATE");
-          Console.ResetColor();
+          var latestVersion = image.Tag;
+          if (latestVersion.Contains('.'))
+          {
+            var tags = await RegistryHelper.GetTagsAsync(image.Registry, image.Repository);
+            latestVersion = VersionHelper.FindLatestMatchingVersion(image.Tag, tags);
+          }
+
+          if (latestVersion != image.Tag)
+          {
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine($"UPDATE AVAILABLE (VERSION {latestVersion})");
+            Console.ResetColor();
+
+            imagesToUpdate.Add((image.Id, image.OriginalName, image.OriginalTag, latestVersion, image.LocalDigest, string.Empty));
+          }
+          else
+          {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("NO UPDATE");
+            Console.ResetColor();
+          }
         }
       }
       catch (Exception ex)
@@ -251,7 +269,7 @@ static async Task ExecuteAsync(Options options)
 
           var containerConfig = new CreateContainerParameters
           {
-            Image = image.OriginalTag,
+            Image = $"{image.OriginalName}:{image.Tag}",
             Platform = inspect.Platform,
             HostConfig = inspect.HostConfig,
             Name = inspect.Name.TrimStart('/'),
@@ -333,8 +351,12 @@ static async Task ExecuteAsync(Options options)
             await dockerClient.Images.DeleteImageAsync(image.Id, new() { Force = true, NoPrune = true });
           }
 
-          Console.WriteLine($"Pulling new image for {image.OriginalTag}");
-          Console.WriteLine(image.NewDigest);
+          Console.WriteLine($"Pulling new image for {image.OriginalName}:{image.Tag}");
+          if (!string.IsNullOrEmpty(image.NewDigest))
+          {
+            Console.WriteLine(image.NewDigest);
+          }
+
           if (!options.DryRun)
           {
             await dockerClient.Images.CreateImageAsync(new() { FromImage = image.OriginalName, Tag = image.Tag }, null, pullProgress);
