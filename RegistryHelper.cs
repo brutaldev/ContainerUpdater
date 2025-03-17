@@ -2,10 +2,11 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace ContainerUpdater;
 
-public static class RegistryHelper
+public static partial class RegistryHelper
 {
   private const string RegularManifestAcceptHeader = "application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json";
   private const string FatManifestAcceptHeader = "application/vnd.docker.distribution.manifest.list.v2+json";
@@ -16,7 +17,8 @@ public static class RegistryHelper
 
   public static async Task<IEnumerable<string>> GetTagsAsync(string registry, string repository, CancellationToken cancellationToken = default)
   {
-    var requestUrl = $"https://{registry}/v2/{repository}/tags/list";
+    var tags = new List<string>();
+    var requestUrl = $"https://{registry}/v2/{repository}/tags/list?n=100";
     var cacheKey = $"{registry}/{repository}";
 
     AuthCache.TryGetValue(cacheKey, out var authHeader);
@@ -42,7 +44,7 @@ public static class RegistryHelper
       if (!string.IsNullOrEmpty(authHeader))
       {
         var retryTagsRequest = new HttpRequestMessage(HttpMethod.Get, requestUrl);
-        tagsRequest.Headers.TryAddWithoutValidation("Accept", "application/json");
+        retryTagsRequest.Headers.TryAddWithoutValidation("Accept", "application/json");
         retryTagsRequest.Headers.TryAddWithoutValidation("Authorization", authHeader);
         tagsResponse = await dockerRegistryClient.SendAsync(retryTagsRequest, cancellationToken);
       }
@@ -50,11 +52,45 @@ public static class RegistryHelper
 
     tagsResponse.EnsureSuccessStatusCode();
 
-    using var doc = JsonDocument.Parse(await tagsResponse.Content.ReadAsStringAsync(cancellationToken));
-    var root = doc.RootElement;
-    var tags = root.GetProperty("tags").Deserialize<IEnumerable<string>>();
+    using (var doc = JsonDocument.Parse(await tagsResponse.Content.ReadAsStringAsync(cancellationToken)))
+    {
+      var root = doc.RootElement;
+      tags.AddRange(root.GetProperty("tags").Deserialize<IEnumerable<string>>() ?? []);
+    }
 
-    return tags ?? [];
+    // Check if there are more tags to fetch.
+    while (tagsResponse.Headers.TryGetValues("Link", out var linkHeaders) && !string.IsNullOrEmpty(linkHeaders?.FirstOrDefault()))
+    {
+      var linkHeader = linkHeaders.First();
+      var urlMatch = LinkHeaderUrlRegex().Match(linkHeader);
+      var relMatch = LinkHeaderRelRegex().Match(linkHeader);
+
+      if (urlMatch.Success && relMatch.Success)
+      {
+        var nextUrl = urlMatch.Groups[1].Value;
+        var rel = relMatch.Groups[1].Value;
+
+        if (rel.Equals("next", StringComparison.OrdinalIgnoreCase))
+        {
+          var nextTagsRequest = new HttpRequestMessage(HttpMethod.Get, $"https://{registry}{nextUrl}");
+          nextTagsRequest.Headers.TryAddWithoutValidation("Accept", "application/json");
+          nextTagsRequest.Headers.TryAddWithoutValidation("Authorization", authHeader);
+          tagsResponse = await dockerRegistryClient.SendAsync(nextTagsRequest, cancellationToken);
+
+          tagsResponse.EnsureSuccessStatusCode();
+
+          using var doc = JsonDocument.Parse(await tagsResponse.Content.ReadAsStringAsync(cancellationToken));
+          var root = doc.RootElement;
+          tags.AddRange(root.GetProperty("tags").Deserialize<IEnumerable<string>>() ?? []);
+        }
+        else
+        {
+          break;
+        }
+      }
+    }
+
+    return tags;
   }
 
   public static async Task<IEnumerable<string>> GetDigestsAsync(string registry, string repository, string tag, CancellationToken cancellationToken = default)
@@ -197,4 +233,10 @@ public static class RegistryHelper
 
     throw new Exception("No 'WWW-Authenticate' header supplied in 401 manifest lookup response.");
   }
+
+  [GeneratedRegex(@"<([^>]+)>")]
+  private static partial Regex LinkHeaderUrlRegex();
+
+  [GeneratedRegex(@"rel\s*=\s*""([^""]+)""")]
+  private static partial Regex LinkHeaderRelRegex();
 }
