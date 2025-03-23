@@ -19,6 +19,9 @@ public class Options
   [Option('p', "password", Required = false, HelpText = "Connect to the docker host with the specified password.")]
   public string Password { get; set; } = string.Empty;
 
+  [Option('d', "digest-only", Required = false, HelpText = "Only update images with new digests and not pinned version numbers.")]
+  public bool DigestOnly { get; set; }
+
   [Option("interactive", Required = false, HelpText = "Pause and choose which images to update in interactive mode.")]
   public bool Interactive { get; set; }
 

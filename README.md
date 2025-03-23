@@ -37,6 +37,13 @@ If you want to pause at certain steps and choose which images to update you can 
 ContainerUpdater --interactive
 ```
 
+#### Digest Only / Ignore Version Numbers
+If you use pinned version numbers and only want to update images with new digests you can use the `--digest-only` option.
+
+```bash
+ContainerUpdater --digest-only
+```
+
 #### Include / Exclude
 If you want to include or exclude certain repository names from update checks, you can pass them in as a lists using the organization, image name or full name.
 Excluding takes precedence over include matches.

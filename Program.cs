@@ -193,11 +193,20 @@ static async Task ExecuteAsync(Options options)
 
           if (latestVersion != image.Tag)
           {
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine($"UPDATE AVAILABLE (VERSION {latestVersion})");
-            Console.ResetColor();
+            if (options.DigestOnly)
+            {
+              Console.ForegroundColor = ConsoleColor.Yellow;
+              Console.WriteLine($"EXCLUDED (VERSION {latestVersion})");
+              Console.ResetColor();
+            }
+            else
+            {
+              Console.ForegroundColor = ConsoleColor.Green;
+              Console.WriteLine($"UPDATE AVAILABLE (VERSION {latestVersion})");
+              Console.ResetColor();
 
-            imagesToUpdate.Add((image.Id, image.OriginalName, image.OriginalTag, latestVersion, image.LocalDigest, string.Empty));
+              imagesToUpdate.Add((image.Id, image.OriginalName, image.OriginalTag, latestVersion, image.LocalDigest, string.Empty));
+            }
           }
           else
           {
@@ -385,12 +394,14 @@ static async Task ExecuteAsync(Options options)
         {
           try
           {
+            Console.WriteLine($"Restoring container {container.Id} ({container.Name})...");
+
             if (!options.DryRun)
             {
               var newContainer = await dockerClient.Containers.CreateContainerAsync(container.CreateParameters);
               if (container.IsRunning)
               {
-                Console.WriteLine($"Starting container {newContainer.ID}...");
+                Console.WriteLine($"Starting new container {newContainer.ID}...");
                 await dockerClient.Containers.StartContainerAsync(newContainer.ID, new());
               }
             }
