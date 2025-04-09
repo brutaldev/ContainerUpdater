@@ -1,7 +1,7 @@
 ﻿using System.Text;
 using System.Text.RegularExpressions;
 
-namespace ContainerUpdater;
+namespace ContainerUpdater.Helpers;
 
 public static class VersionHelper
 {

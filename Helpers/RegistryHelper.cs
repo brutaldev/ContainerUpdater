@@ -4,7 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
-namespace ContainerUpdater;
+namespace ContainerUpdater.Helpers;
 
 public static partial class RegistryHelper
 {

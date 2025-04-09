@@ -2,6 +2,8 @@
 using Captin.ConsoleIntercept;
 using CommandLine;
 using ContainerUpdater;
+using ContainerUpdater.Helpers;
+using ContainerUpdater.Models;
 using Docker.DotNet;
 using Docker.DotNet.BasicAuth;
 using Docker.DotNet.Models;
@@ -54,8 +56,8 @@ static async Task ExecuteAsync(Options options)
     await dockerClient.System.PingAsync();
     connected = true;
 
-    List<(string Id, string OriginalName, string OriginalTag, string Registry, string Repository, string Tag, string LocalDigest)> imagesToCheck = [];
-    List<(string Id, string OriginalName, string OriginalTag, string Tag, string LocalDigest, string NewDigest)> imagesToUpdate = [];
+    List<CheckImage> imagesToCheck = [];
+    List<UpdateImage> imagesToUpdate = [];
 
     var version = await dockerClient.System.GetVersionAsync();
 
@@ -145,7 +147,7 @@ static async Task ExecuteAsync(Options options)
     // Check each image for updates.
     foreach (var image in imagesToCheck)
     {
-      Console.Write($"Checking image {image.OriginalTag}... ");
+      Console.Write($"Checking image {image.OriginalTag}...");
 
       // Check if the image has been excluded.
       if (options.Exclude.Contains(image.Repository, StringComparer.OrdinalIgnoreCase) ||
@@ -180,7 +182,7 @@ static async Task ExecuteAsync(Options options)
           Console.WriteLine("UPDATE AVAILABLE (DIGEST)");
           Console.ResetColor();
 
-          imagesToUpdate.Add((image.Id, image.OriginalName, image.OriginalTag, image.Tag, image.LocalDigest, remoteDigests.First()));
+          imagesToUpdate.Add(new(image.Id, image.OriginalName, image.OriginalTag, image.Tag, image.LocalDigest, remoteDigests.First()));
         }
         else
         {
@@ -205,7 +207,7 @@ static async Task ExecuteAsync(Options options)
               Console.WriteLine($"UPDATE AVAILABLE (VERSION {latestVersion})");
               Console.ResetColor();
 
-              imagesToUpdate.Add((image.Id, image.OriginalName, image.OriginalTag, latestVersion, image.LocalDigest, string.Empty));
+              imagesToUpdate.Add(new(image.Id, image.OriginalName, image.OriginalTag, latestVersion, image.LocalDigest, string.Empty));
             }
           }
           else
@@ -245,6 +247,7 @@ static async Task ExecuteAsync(Options options)
       {
         if (options.Interactive)
         {
+          Console.WriteLine();
           Console.Write($"Update {image.OriginalTag}? [Y/N]: ");
           var choice = Console.ReadKey(true);
 
@@ -279,7 +282,6 @@ static async Task ExecuteAsync(Options options)
           var containerConfig = new CreateContainerParameters
           {
             Image = $"{image.OriginalName}:{image.Tag}",
-            Platform = inspect.Platform,
             HostConfig = inspect.HostConfig,
             Name = inspect.Name.TrimStart('/'),
             Env = inspect.Config.Env,

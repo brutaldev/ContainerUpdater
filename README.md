@@ -2,6 +2,8 @@
 	
 # Container Updater
 
+![Nuget](https://img.shields.io/nuget/dt/ContainerUpdater)
+
 Automate updating Docker images and the containers that use them.
 
 Updating Docker images in-place is a surprisingly complex task that requires multiple steps which are both time consuming and error prone if done manually.

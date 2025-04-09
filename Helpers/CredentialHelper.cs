@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 
-namespace ContainerUpdater;
+namespace ContainerUpdater.Helpers;
 
 public static class CredentialHelper
 {
