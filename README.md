@@ -93,6 +93,14 @@ Watchtower (https://github.com/containrrr/watchtower) and Ouroboros (https://git
 Both these options run as docker containers themselves which actually creates unnecessary complexity.
 Container Update was created because these options just take too long to setup effectively as well as requiring their own maintenance.
 
+#### Watchtower Migration/Compatibility
+
+Container Updater is compatible with Watchtower labels so if you have existing containers that were setup with Watchtower labels, Container Updater will respect those labels and only update the containers that are marked for updates.
+- `monitor-only` label: https://containrrr.dev/watchtower/container-selection/#monitor_only
+- `enable` label: https://containrrr.dev/watchtower/container-selection/#full_exclude
+- `no-pull` label: https://containrrr.dev/watchtower/arguments/#without_pulling_new_images
+- `depends-on` label: https://containrrr.dev/watchtower/linked-containers
+
 Running an updater outside of Docker is incredibly simple and requires zero setup.
 Container Updater also provides the following:
 - No installation or configuration, just double-click.
@@ -117,3 +125,4 @@ Container Updater also provides the following:
 - [x] Deploy as a .NET global tool
 - [x] Write all output to log file
 - [x] Detect version numbers and new version tags
+- [x] Watchtower label compatibility

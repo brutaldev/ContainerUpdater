@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+﻿using System.Collections.Immutable;
+using System.Reflection;
 using Captin.ConsoleIntercept;
 using CommandLine;
 using ContainerUpdater;
@@ -9,6 +10,14 @@ using Docker.DotNet.BasicAuth;
 using Docker.DotNet.Models;
 
 const string DockerRegistry = "index.docker.io";
+
+const string DockerComposeProjectOnKey = "com.docker.compose.project";
+const string DockerComposeDependsOnKey = "com.docker.compose.depends_on";
+
+const string WatchtowerMonitorOnlyKey = "com.centurylinklabs.watchtower.monitor-only";
+const string WatchtowerEnableKey = "com.centurylinklabs.watchtower.enable";
+const string WatchtowerDependsOnKey = "com.centurylinklabs.watchtower.depends-on";
+const string WatchtowerNoPullOnKey = "com.centurylinklabs.watchtower.no-pull";
 
 // Steps to auto update base images and containers that use them:
 // 1. Get all the current image digests and tags to perform a manifest lookup.
@@ -144,45 +153,97 @@ static async Task ExecuteAsync(Options options)
     Console.WriteLine($"Checking {imagesToCheck.Count} images across {imagesToCheck.DistinctBy(img => img.Registry).Count()} registries...");
     Console.WriteLine();
 
+    // Get all containers to check their labels for Watchtower label-enable mode
+    var allContainers = await dockerClient.Containers.ListContainersAsync(new() { All = true });
+    var containerLabelMap = new Dictionary<string, IDictionary<string, string>>();
+
+    foreach (var container in allContainers)
+    {
+      containerLabelMap[container.ImageID] = container.Labels ?? ImmutableDictionary<string, string>.Empty;
+    }
+
+    // Check if we're in label-enable mode (any container has the enable label)
+    var isWatchtowerLabelEnable = containerLabelMap.Values
+        .Any(labels => labels.ContainsKey(WatchtowerEnableKey) &&
+                       labels[WatchtowerEnableKey]?.Equals("true", StringComparison.OrdinalIgnoreCase) == true);
+
     // Check each image for updates.
     foreach (var image in imagesToCheck)
     {
       Console.Write($"Checking image {image.OriginalTag}...");
 
-      // Check if the image has been excluded.
+      // Check if the image has been excluded by filter options
       if (options.Exclude.Contains(image.Repository, StringComparer.OrdinalIgnoreCase) ||
           image.Repository.Split('/').Any(x => options.Exclude.Contains(x, StringComparer.OrdinalIgnoreCase)))
       {
         Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.WriteLine("EXCLUDED");
+        Console.WriteLine("EXCLUDED (FILTER OPTION)");
         Console.ResetColor();
-
         continue;
       }
 
-      // Check if the image has been included.
+      // Check if the image has been included by filter options
       if (options.Include.Any() &&
          !options.Include.Contains(image.Repository, StringComparer.OrdinalIgnoreCase) &&
          !image.Repository.Split('/').Any(x => options.Include.Contains(x, StringComparer.OrdinalIgnoreCase)))
       {
         Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.WriteLine("EXCLUDED");
+        Console.WriteLine("EXCLUDED (FILTER OPTION)");
         Console.ResetColor();
+        continue;
+      }
 
+      // Get container labels for this image (if any containers use this image)
+      var containerLabels = containerLabelMap.TryGetValue(image.Id, out var containerLabelsValue) ? containerLabelsValue : ImmutableDictionary<string, string>.Empty;
+
+      // Watchtower label-based exclusion logic
+      var enableValue = containerLabels.TryGetValue(WatchtowerEnableKey, out var watchtowerEnableKeyValue) ? watchtowerEnableKeyValue : null;
+
+      // If in label-enable mode, only process containers with enable=true
+      if (isWatchtowerLabelEnable)
+      {
+        if (string.IsNullOrEmpty(enableValue) || !enableValue.Equals("true", StringComparison.OrdinalIgnoreCase))
+        {
+          Console.ForegroundColor = ConsoleColor.Yellow;
+          Console.WriteLine("EXCLUDED (WATCHTOWER LABEL)");
+          Console.ResetColor();
+          continue;
+        }
+      }
+      // If not in label-enable mode, exclude containers with enable=false
+      else if (!string.IsNullOrEmpty(enableValue) && enableValue.Equals("false", StringComparison.OrdinalIgnoreCase))
+      {
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine("EXCLUDED (WATCHTOWER LABEL)");
+        Console.ResetColor();
         continue;
       }
 
       try
       {
+        // Check for monitor-only label on containers
+        var isMonitorOnly = containerLabels.TryGetValue(WatchtowerMonitorOnlyKey, out var watchtowerMonitorOnlyKeyValue) &&
+                            watchtowerMonitorOnlyKeyValue.Equals("true", StringComparison.OrdinalIgnoreCase);
+
+        // Check for no-pull label on containers
+        var isNoPull = containerLabels.TryGetValue(WatchtowerNoPullOnKey, out var watchtowerNoPullOnKeyValue) &&
+                       watchtowerNoPullOnKeyValue.Equals("true", StringComparison.OrdinalIgnoreCase);
+
         var remoteDigests = await RegistryHelper.GetDigestsAsync(image.Registry, image.Repository, image.Tag);
 
-        if (!remoteDigests.Any(digest => digest == image.LocalDigest))
+        if (!isMonitorOnly && !isNoPull && !remoteDigests.Any(digest => digest == image.LocalDigest))
         {
           Console.ForegroundColor = ConsoleColor.Green;
           Console.WriteLine("UPDATE AVAILABLE (DIGEST)");
           Console.ResetColor();
 
           imagesToUpdate.Add(new(image.Id, image.OriginalName, image.OriginalTag, image.Tag, image.LocalDigest, remoteDigests.First()));
+        }
+        else if (isNoPull && !remoteDigests.Any(digest => digest == image.LocalDigest))
+        {
+          Console.ForegroundColor = ConsoleColor.Yellow;
+          Console.WriteLine("EXCLUDED (NO-PULL LABEL)");
+          Console.ResetColor();
         }
         else
         {
@@ -195,10 +256,17 @@ static async Task ExecuteAsync(Options options)
 
           if (latestVersion != image.Tag)
           {
-            if (options.DigestOnly)
+            if (options.DigestOnly || isMonitorOnly || isNoPull)
             {
               Console.ForegroundColor = ConsoleColor.Yellow;
-              Console.WriteLine($"EXCLUDED (VERSION {latestVersion})");
+              if (isNoPull)
+              {
+                Console.WriteLine($"EXCLUDED (NO-PULL LABEL, VERSION {latestVersion})");
+              }
+              else
+              {
+                Console.WriteLine($"EXCLUDED (VERSION {latestVersion})");
+              }
               Console.ResetColor();
             }
             else
@@ -242,7 +310,9 @@ static async Task ExecuteAsync(Options options)
       var pullProgress = new Progress<JSONMessage>(_ => Console.Write("."));
       var dockerContainers = await dockerClient.Containers.ListContainersAsync(new() { All = true });
 
-      // Perform the update on images.
+      // Group containers by image and build dependency information
+      var containerUpdateGroups = new List<ContainerUpdateGroup>();
+
       foreach (var image in imagesToUpdate)
       {
         if (options.Interactive)
@@ -267,17 +337,45 @@ static async Task ExecuteAsync(Options options)
             Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine("No");
             Console.ResetColor();
-
             continue;
           }
         }
 
-        // Find all containers using the image.
-        var containersUsingImage = new List<(string Id, string Name, bool IsRunning, CreateContainerParameters CreateParameters)>();
+        // Find all containers using the image and build dependency information
+        var containersForImage = new List<ContainerInfo>();
 
-        foreach (var containerId in dockerContainers.Where(c => c.ImageID == image.Id).Select(c => c.ID))
+        foreach (var container in dockerContainers.Where(c => c.ImageID == image.Id))
         {
-          var inspect = await dockerClient.Containers.InspectContainerAsync(containerId);
+          var inspect = await dockerClient.Containers.InspectContainerAsync(container.ID);
+          var labels = container.Labels ?? ImmutableDictionary<string, string>.Empty;
+          var project = labels.TryGetValue(DockerComposeProjectOnKey, out var dockerComposeProjectOnKeyValue) ? dockerComposeProjectOnKeyValue : string.Empty;
+          var dependencies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+          // Parse Docker Compose dependencies
+          if (labels.TryGetValue(DockerComposeDependsOnKey, out var dockerComposeDependsOnKeyValue))
+          {
+            foreach (var dependencyName in dockerComposeDependsOnKeyValue
+              .Split(',', StringSplitOptions.RemoveEmptyEntries)
+              .Select(d => d.Trim().Split(':')[0]) // Remove condition if present (service:condition)
+              .Where(d => !string.IsNullOrEmpty(d)))
+            {
+              // For Docker Compose, dependencies might be prefixed with project name
+              dependencies.Add(string.IsNullOrEmpty(project) ? dependencyName : $"{project}_{dependencyName}");
+              dependencies.Add(dependencyName); // Also add without prefix for flexibility
+            }
+          }
+
+          // Parse Watchtower dependencies
+          if (labels.TryGetValue(WatchtowerDependsOnKey, out var watchtowerDependsOnKeyValue))
+          {
+            foreach (var dependencyName in watchtowerDependsOnKeyValue
+              .Split(',', StringSplitOptions.RemoveEmptyEntries)
+              .Select(d => d.Trim())
+              .Where(d => !string.IsNullOrEmpty(d)))
+            {
+              dependencies.Add(dependencyName);
+            }
+          }
 
           var containerConfig = new CreateContainerParameters
           {
@@ -314,11 +412,35 @@ static async Task ExecuteAsync(Options options)
             },
           };
 
-          containersUsingImage.Add((containerId, inspect.Name.TrimStart('/'), inspect.State.Running, containerConfig));
+          containersForImage.Add(new ContainerInfo(
+            container.ID,
+            inspect.Name.TrimStart('/'),
+            inspect.State.Running,
+            containerConfig,
+            dependencies,
+            project));
         }
 
-        // Stop and remove containers using the image.
-        foreach (var container in containersUsingImage)
+        if (containersForImage.Count > 0)
+        {
+          containerUpdateGroups.Add(new ContainerUpdateGroup(
+            image.Id,
+            image.OriginalName,
+            image.Tag,
+            containersForImage));
+        }
+      }
+
+      // Process each update group
+      foreach (var updateGroup in containerUpdateGroups)
+      {
+        Console.WriteLine($"Processing containers for image {updateGroup.ImageName}");
+
+        // Sort containers by dependencies for proper stop order (dependencies first)
+        var sortedContainers = SortContainersByDependencies(updateGroup.Containers);
+
+        // Stop and remove containers in dependency order
+        foreach (var container in sortedContainers)
         {
           try
           {
@@ -338,7 +460,7 @@ static async Task ExecuteAsync(Options options)
 
             if (!options.DryRun)
             {
-              await dockerClient.Containers.RemoveContainerAsync(container.Id, new() { Force = true, RemoveLinks = false, RemoveVolumes = false, });
+              await dockerClient.Containers.RemoveContainerAsync(container.Id, new() { Force = true, RemoveLinks = false, RemoveVolumes = false });
             }
           }
           catch (Exception ex)
@@ -353,24 +475,29 @@ static async Task ExecuteAsync(Options options)
           }
         }
 
+        // Remove old image and pull new one
         try
         {
-          Console.WriteLine($"Removing old image for {image.OriginalTag}");
-          Console.WriteLine(image.LocalDigest);
-          if (!options.DryRun)
-          {
-            await dockerClient.Images.DeleteImageAsync(image.Id, new() { Force = true, NoPrune = true });
-          }
+          var imageToUpdate = imagesToUpdate.First(img => img.Id == updateGroup.ImageId);
 
-          Console.WriteLine($"Pulling new image for {image.OriginalName}:{image.Tag}");
-          if (!string.IsNullOrEmpty(image.NewDigest))
-          {
-            Console.WriteLine(image.NewDigest);
-          }
+          Console.WriteLine($"Removing old image for {imageToUpdate.OriginalTag}");
+          Console.WriteLine(imageToUpdate.LocalDigest);
 
           if (!options.DryRun)
           {
-            await dockerClient.Images.CreateImageAsync(new() { FromImage = image.OriginalName, Tag = image.Tag }, null, pullProgress);
+            await dockerClient.Images.DeleteImageAsync(updateGroup.ImageId, new() { Force = true, NoPrune = true });
+          }
+
+          Console.WriteLine($"Pulling new image for {updateGroup.ImageName}:{updateGroup.NewTag}");
+
+          if (!string.IsNullOrEmpty(imageToUpdate.NewDigest))
+          {
+            Console.WriteLine(imageToUpdate.NewDigest);
+          }
+
+          if (!options.DryRun)
+          {
+            await dockerClient.Images.CreateImageAsync(new() { FromImage = updateGroup.ImageName, Tag = updateGroup.NewTag }, null, pullProgress);
             Console.WriteLine();
             Console.WriteLine();
           }
@@ -389,22 +516,30 @@ static async Task ExecuteAsync(Options options)
           Console.WriteLine();
           Console.WriteLine(ex.ToString());
           Console.WriteLine();
+          continue; // Skip container recreation if image update failed
         }
 
-        // Restore and start containers using the new image.
-        foreach (var container in containersUsingImage)
+        // Recreate and start containers in reverse dependency order (dependents first)
+        foreach (var container in sortedContainers.AsEnumerable().Reverse())
         {
           try
           {
-            Console.WriteLine($"Restoring container {container.Id} ({container.Name})...");
+            Console.WriteLine($"Restoring container {container.Name}...");
 
             if (!options.DryRun)
             {
+              // Update the image reference in the container config
+              container.CreateParameters.Image = $"{updateGroup.ImageName}:{updateGroup.NewTag}";
+
               var newContainer = await dockerClient.Containers.CreateContainerAsync(container.CreateParameters);
+
               if (container.IsRunning)
               {
-                Console.WriteLine($"Starting new container {newContainer.ID}...");
+                Console.WriteLine($"Starting container {container.Name} ({newContainer.ID})...");
                 await dockerClient.Containers.StartContainerAsync(newContainer.ID, new());
+
+                // Small delay to allow container to start before starting dependents
+                await Task.Delay(1000);
               }
             }
           }
@@ -420,7 +555,8 @@ static async Task ExecuteAsync(Options options)
           }
         }
 
-        containersUsingImage.Clear();
+        Console.WriteLine($"Completed update for {updateGroup.ImageName}");
+        Console.WriteLine();
       }
     }
     else
@@ -465,4 +601,48 @@ static async Task ExecuteAsync(Options options)
   }
 
   Environment.Exit(exitCode);
+}
+
+static List<ContainerInfo> SortContainersByDependencies(List<ContainerInfo> containers)
+{
+  var sorted = new List<ContainerInfo>();
+  var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+  var visiting = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+  var containerMap = containers.ToDictionary(c => c.Name, StringComparer.OrdinalIgnoreCase);
+
+  void Visit(ContainerInfo container)
+  {
+    if (visiting.Contains(container.Name))
+    {
+      Console.WriteLine($"Warning: Circular dependency detected involving container '{container.Name}'");
+      return;
+    }
+
+    if (visited.Contains(container.Name))
+    {
+      return;
+    }
+
+    visiting.Add(container.Name);
+
+    // Visit dependencies first (for stopping order)
+    foreach (var dependency in container.Dependencies)
+    {
+      if (containerMap.TryGetValue(dependency, out var depContainer))
+      {
+        Visit(depContainer);
+      }
+    }
+
+    visiting.Remove(container.Name);
+    visited.Add(container.Name);
+    sorted.Add(container);
+  }
+
+  foreach (var container in containers)
+  {
+    Visit(container);
+  }
+
+  return sorted;
 }
