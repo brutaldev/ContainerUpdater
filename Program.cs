@@ -421,58 +421,61 @@ static async Task ExecuteAsync(Options options)
             project));
         }
 
-        if (containersForImage.Count > 0)
-        {
-          containerUpdateGroups.Add(new ContainerUpdateGroup(
-            image.Id,
-            image.OriginalName,
-            image.Tag,
-            containersForImage));
-        }
+        // Always add the image to the update groups, even if it has no containers
+        containerUpdateGroups.Add(new ContainerUpdateGroup(
+          image.Id,
+          image.OriginalName,
+          image.Tag,
+          containersForImage));
       }
 
       // Process each update group
       foreach (var updateGroup in containerUpdateGroups)
       {
-        Console.WriteLine($"Processing containers for image {updateGroup.ImageName}");
-
-        // Sort containers by dependencies for proper stop order (dependencies first)
-        var sortedContainers = SortContainersByDependencies(updateGroup.Containers);
-
-        // Stop and remove containers in dependency order
-        foreach (var container in sortedContainers)
+        if (updateGroup.Containers.Count > 0)
         {
-          try
+          Console.WriteLine($"Processing containers for image {updateGroup.ImageName}");
+
+          // Sort containers by dependencies for proper stop order (dependencies first)
+          foreach (var container in SortContainersByDependencies(updateGroup.Containers))
           {
-            if (container.IsRunning)
+            // Stop and remove containers in dependency order
+            try
             {
-              Console.WriteLine($"Stopping container {container.Name} ({container.Id})...");
-
-              if (!options.DryRun && !await dockerClient.Containers.StopContainerAsync(container.Id, new() { WaitBeforeKillSeconds = 15 }))
+              if (container.IsRunning)
               {
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("Failed to stop container, killing it instead...");
-                Console.ResetColor();
+                Console.WriteLine($"Stopping container {container.Name} ({container.Id})...");
 
-                await dockerClient.Containers.KillContainerAsync(container.Id, new());
+                if (!options.DryRun && !await dockerClient.Containers.StopContainerAsync(container.Id, new() { WaitBeforeKillSeconds = 15 }))
+                {
+                  Console.ForegroundColor = ConsoleColor.Red;
+                  Console.WriteLine("Failed to stop container, killing it instead...");
+                  Console.ResetColor();
+
+                  await dockerClient.Containers.KillContainerAsync(container.Id, new());
+                }
+              }
+
+              if (!options.DryRun)
+              {
+                await dockerClient.Containers.RemoveContainerAsync(container.Id, new() { Force = true, RemoveLinks = false, RemoveVolumes = false });
               }
             }
-
-            if (!options.DryRun)
+            catch (Exception ex)
             {
-              await dockerClient.Containers.RemoveContainerAsync(container.Id, new() { Force = true, RemoveLinks = false, RemoveVolumes = false });
+              Console.ForegroundColor = ConsoleColor.Red;
+              Console.WriteLine("CONTAINER REMOVAL FAILED");
+              Console.ResetColor();
+
+              Console.WriteLine();
+              Console.WriteLine(ex.ToString());
+              Console.WriteLine();
             }
           }
-          catch (Exception ex)
-          {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine("CONTAINER REMOVAL FAILED");
-            Console.ResetColor();
-
-            Console.WriteLine();
-            Console.WriteLine(ex.ToString());
-            Console.WriteLine();
-          }
+        }
+        else
+        {
+          Console.WriteLine($"Processing standalone image {updateGroup.ImageName} (no containers)");
         }
 
         // Remove old image and pull new one
@@ -520,38 +523,41 @@ static async Task ExecuteAsync(Options options)
         }
 
         // Recreate and start containers in reverse dependency order (dependents first)
-        foreach (var container in sortedContainers.AsEnumerable().Reverse())
+        if (updateGroup.Containers.Count > 0)
         {
-          try
+          foreach (var container in SortContainersByDependencies(updateGroup.Containers).AsEnumerable().Reverse())
           {
-            Console.WriteLine($"Restoring container {container.Name}...");
-
-            if (!options.DryRun)
+            try
             {
-              // Update the image reference in the container config
-              container.CreateParameters.Image = $"{updateGroup.ImageName}:{updateGroup.NewTag}";
+              Console.WriteLine($"Restoring container {container.Name}...");
 
-              var newContainer = await dockerClient.Containers.CreateContainerAsync(container.CreateParameters);
-
-              if (container.IsRunning)
+              if (!options.DryRun)
               {
-                Console.WriteLine($"Starting container {container.Name} ({newContainer.ID})...");
-                await dockerClient.Containers.StartContainerAsync(newContainer.ID, new());
+                // Update the image reference in the container config
+                container.CreateParameters.Image = $"{updateGroup.ImageName}:{updateGroup.NewTag}";
 
-                // Small delay to allow container to start before starting dependents
-                await Task.Delay(1000);
+                var newContainer = await dockerClient.Containers.CreateContainerAsync(container.CreateParameters);
+
+                if (container.IsRunning)
+                {
+                  Console.WriteLine($"Starting container {container.Name} ({newContainer.ID})...");
+                  await dockerClient.Containers.StartContainerAsync(newContainer.ID, new());
+
+                  // Small delay to allow container to start before starting dependents
+                  await Task.Delay(1000);
+                }
               }
             }
-          }
-          catch (Exception ex)
-          {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine("CONTAINER CREATION FAILED");
-            Console.ResetColor();
+            catch (Exception ex)
+            {
+              Console.ForegroundColor = ConsoleColor.Red;
+              Console.WriteLine("CONTAINER CREATION FAILED");
+              Console.ResetColor();
 
-            Console.WriteLine();
-            Console.WriteLine(ex.ToString());
-            Console.WriteLine();
+              Console.WriteLine();
+              Console.WriteLine(ex.ToString());
+              Console.WriteLine();
+            }
           }
         }
 
