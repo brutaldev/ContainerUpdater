@@ -122,7 +122,7 @@ static async Task ExecuteAsync(Options options)
       // Parse the various properties to get the registry, repository, tag and digest.
       var digestParts = repoDigest.Split('@');
       var imageName = digestParts[0];
-      var digest = digestParts[1];
+      var digest = digestParts.Length > 1 ? digestParts[1] : string.Empty;
 
       var repositoryParts = imageName.Split('/');
       if (repositoryParts.Length < 2)

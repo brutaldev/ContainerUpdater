@@ -5,8 +5,8 @@
     <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AssemblyVersion>1.3.1.0</AssemblyVersion>
-    <Version>1.3.1.0</Version>
+    <AssemblyVersion>1.3.2.0</AssemblyVersion>
+    <Version>1.3.2.0</Version>
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>ContainerUpdater</ToolCommandName>
@@ -26,6 +26,7 @@
       - Support Watchtower `enable` label: https://containrrr.dev/watchtower/container-selection/#full_exclude
       - Support Watchtower `depends-on` label: https://containrrr.dev/watchtower/linked-containers
       - Support Watchtower `no-pull` label: https://containrrr.dev/watchtower/arguments/#without_pulling_new_images
+      - Fix crash when image digest does not have two parts.
     </ReleaseNotes>
   </PropertyGroup>
 
