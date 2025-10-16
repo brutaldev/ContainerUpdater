@@ -112,17 +112,17 @@ Container Updater also provides the following:
 
 ### TODO
 
-- [x] Automatically use available cached credentials (cross-platform)
-- [x] Handle automatic token generation for different registries
-- [x] Handle multiple digest checks using different content types
-- [x] Restore all attributes as well (compose groups)
-- [x] Support dry run just to check for and show updates
-- [x] Support adding image names to include/exclude in checks
-- [x] Support selection of images to update (interactive mode)
-- [x] Support updating a remote docker host
+- [x] <del>Automatically use available cached credentials (cross-platform)</del>
+- [x] <del>Handle automatic token generation for different registries</del>
+- [x] <del>Handle multiple digest checks using different content types</del>
+- [x] <del>Restore all attributes as well (compose groups)</del>
+- [x] <del>Support dry run just to check for and show updates</del>
+- [x] <del>Support adding image names to include/exclude in checks</del>
+- [x] <del>Support selection of images to update (interactive mode)</del>
+- [x] <del>Support updating a remote docker host</del>
+- [x] <del>Deploy as a .NET global tool</del>
+- [x] <del>Write all output to log file</del>
+- [x] <del>Detect version numbers and new version tags</del>
+- [x] <del>Watchtower label compatibility</del>
 - [ ] Export container settings to recover from failures
 - [ ] Add cross-platform UI to run in the system tray
-- [x] Deploy as a .NET global tool
-- [x] Write all output to log file
-- [x] Detect version numbers and new version tags
-- [x] Watchtower label compatibility
