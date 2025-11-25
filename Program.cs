@@ -121,8 +121,16 @@ static async Task ExecuteAsync(Options options)
 
       // Parse the various properties to get the registry, repository, tag and digest.
       var digestParts = repoDigest.Split('@');
+      var tagParts = repoTag.Split(':');
       var imageName = digestParts[0];
-      var digest = digestParts.Length > 1 ? digestParts[1] : string.Empty;
+      var digest = digestParts.Length > 1 ? digestParts[1] : digestParts[0];
+      var tag = tagParts[1];
+
+      // Some images do not have the name prefixed with the digest, we can fallback to the repository name.
+      if (imageName == digest)
+      {
+        imageName = tagParts[0];
+      }
 
       var repositoryParts = imageName.Split('/');
       if (repositoryParts.Length < 2)
@@ -137,9 +145,6 @@ static async Task ExecuteAsync(Options options)
 
       var registry = repositoryParts[0];
       var repository = string.Join('/', repositoryParts.Skip(1));
-
-      var tagParts = repoTag.Split(':');
-      var tag = tagParts[1];
 
       // Special handling for Docker.io
       if (registry.Equals("docker.io", StringComparison.OrdinalIgnoreCase))
