@@ -160,11 +160,24 @@ static async Task ExecuteAsync(Options options)
 
     // Get all containers to check their labels for Watchtower label-enable mode
     var allContainers = await dockerClient.Containers.ListContainersAsync(new() { All = true });
-    var containerLabelMap = new Dictionary<string, IDictionary<string, string>>();
+
+    // Map each image ID to the union of labels from all containers using that image.
+    // Multiple containers can share an image, so we merge their label sets.
+    var containerLabelMap = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
 
     foreach (var container in allContainers)
     {
-      containerLabelMap[container.ImageID] = container.Labels ?? ImmutableDictionary<string, string>.Empty;
+      var labels = container.Labels ?? ImmutableDictionary<string, string>.Empty;
+      if (!containerLabelMap.TryGetValue(container.ImageID, out var merged))
+      {
+        merged = [];
+        containerLabelMap[container.ImageID] = merged;
+      }
+
+      foreach (var kvp in labels)
+      {
+        merged.TryAdd(kvp.Key, kvp.Value);
+      }
     }
 
     // Check if we're in label-enable mode (any container has the enable label)
@@ -178,8 +191,10 @@ static async Task ExecuteAsync(Options options)
       Console.Write($"Checking image {image.OriginalTag}...");
 
       // Check if the image has been excluded by filter options
+      var repositorySegments = image.Repository.Split('/');
+
       if (options.Exclude.Contains(image.Repository, StringComparer.OrdinalIgnoreCase) ||
-          image.Repository.Split('/').Any(x => options.Exclude.Contains(x, StringComparer.OrdinalIgnoreCase)))
+          repositorySegments.Any(x => options.Exclude.Contains(x, StringComparer.OrdinalIgnoreCase)))
       {
         Console.ForegroundColor = ConsoleColor.Yellow;
         Console.WriteLine("EXCLUDED (FILTER OPTION)");
@@ -190,7 +205,7 @@ static async Task ExecuteAsync(Options options)
       // Check if the image has been included by filter options
       if (options.Include.Any() &&
          !options.Include.Contains(image.Repository, StringComparer.OrdinalIgnoreCase) &&
-         !image.Repository.Split('/').Any(x => options.Include.Contains(x, StringComparer.OrdinalIgnoreCase)))
+         !repositorySegments.Any(x => options.Include.Contains(x, StringComparer.OrdinalIgnoreCase)))
       {
         Console.ForegroundColor = ConsoleColor.Yellow;
         Console.WriteLine("EXCLUDED (FILTER OPTION)");
@@ -199,7 +214,7 @@ static async Task ExecuteAsync(Options options)
       }
 
       // Get container labels for this image (if any containers use this image)
-      var containerLabels = containerLabelMap.TryGetValue(image.Id, out var containerLabelsValue) ? containerLabelsValue : ImmutableDictionary<string, string>.Empty;
+      var containerLabels = containerLabelMap.TryGetValue(image.Id, out var containerLabelsValue) ? containerLabelsValue : new Dictionary<string, string>();
 
       // Watchtower label-based exclusion logic
       var enableValue = containerLabels.TryGetValue(WatchtowerEnableKey, out var watchtowerEnableKeyValue) ? watchtowerEnableKeyValue : null;
@@ -428,9 +443,7 @@ static async Task ExecuteAsync(Options options)
 
         // Always add the image to the update groups, even if it has no containers
         containerUpdateGroups.Add(new ContainerUpdateGroup(
-          image.Id,
-          image.OriginalName,
-          image.Tag,
+          image,
           containersForImage));
       }
 
@@ -439,10 +452,10 @@ static async Task ExecuteAsync(Options options)
       {
         if (updateGroup.Containers.Count > 0)
         {
-          Console.WriteLine($"Processing containers for image {updateGroup.ImageName}");
+          Console.WriteLine($"Processing containers for image {updateGroup.Image.OriginalName}");
 
           // Sort containers by dependencies for proper stop order (dependencies first)
-          foreach (var container in SortContainersByDependencies(updateGroup.Containers))
+          foreach (var container in ContainerHelper.SortByDependencies(updateGroup.Containers))
           {
             // Stop and remove containers in dependency order
             try
@@ -480,32 +493,30 @@ static async Task ExecuteAsync(Options options)
         }
         else
         {
-          Console.WriteLine($"Processing standalone image {updateGroup.ImageName} (no containers)");
+          Console.WriteLine($"Processing standalone image {updateGroup.Image.OriginalName} (no containers)");
         }
 
         // Remove old image and pull new one
         try
         {
-          var imageToUpdate = imagesToUpdate.First(img => img.Id == updateGroup.ImageId);
-
-          Console.WriteLine($"Removing old image for {imageToUpdate.OriginalTag}");
-          Console.WriteLine(imageToUpdate.LocalDigest);
+          Console.WriteLine($"Removing old image for {updateGroup.Image.OriginalTag}");
+          Console.WriteLine(updateGroup.Image.LocalDigest);
 
           if (!options.DryRun)
           {
-            await dockerClient.Images.DeleteImageAsync(updateGroup.ImageId, new() { Force = true, NoPrune = true });
+            await dockerClient.Images.DeleteImageAsync(updateGroup.Image.Id, new() { Force = true, NoPrune = true });
           }
 
-          Console.WriteLine($"Pulling new image for {updateGroup.ImageName}:{updateGroup.NewTag}");
+          Console.WriteLine($"Pulling new image for {updateGroup.Image.OriginalName}:{updateGroup.Image.Tag}");
 
-          if (!string.IsNullOrEmpty(imageToUpdate.NewDigest))
+          if (!string.IsNullOrEmpty(updateGroup.Image.NewDigest))
           {
-            Console.WriteLine(imageToUpdate.NewDigest);
+            Console.WriteLine(updateGroup.Image.NewDigest);
           }
 
           if (!options.DryRun)
           {
-            await dockerClient.Images.CreateImageAsync(new() { FromImage = updateGroup.ImageName, Tag = updateGroup.NewTag }, null, pullProgress);
+            await dockerClient.Images.CreateImageAsync(new() { FromImage = updateGroup.Image.OriginalName, Tag = updateGroup.Image.Tag }, null, pullProgress);
             Console.WriteLine();
             Console.WriteLine();
           }
@@ -530,7 +541,7 @@ static async Task ExecuteAsync(Options options)
         // Recreate and start containers in reverse dependency order (dependents first)
         if (updateGroup.Containers.Count > 0)
         {
-          foreach (var container in SortContainersByDependencies(updateGroup.Containers).AsEnumerable().Reverse())
+          foreach (var container in ContainerHelper.SortByDependencies(updateGroup.Containers).AsEnumerable().Reverse())
           {
             try
             {
@@ -539,7 +550,7 @@ static async Task ExecuteAsync(Options options)
               if (!options.DryRun)
               {
                 // Update the image reference in the container config
-                container.CreateParameters.Image = $"{updateGroup.ImageName}:{updateGroup.NewTag}";
+                container.CreateParameters.Image = $"{updateGroup.Image.OriginalName}:{updateGroup.Image.Tag}";
 
                 var newContainer = await dockerClient.Containers.CreateContainerAsync(container.CreateParameters);
 
@@ -566,7 +577,7 @@ static async Task ExecuteAsync(Options options)
           }
         }
 
-        Console.WriteLine($"Completed update for {updateGroup.ImageName}");
+        Console.WriteLine($"Completed update for {updateGroup.Image.OriginalName}");
         Console.WriteLine();
       }
     }
@@ -593,7 +604,7 @@ static async Task ExecuteAsync(Options options)
     else
     {
       Console.ForegroundColor = ConsoleColor.Yellow;
-      Console.WriteLine("Docker engine is not running :(");
+      Console.WriteLine($"Docker engine is not running :( ({ex.Message})");
       Console.ResetColor();
 
       exitCode = 2;
@@ -601,7 +612,7 @@ static async Task ExecuteAsync(Options options)
   }
   finally
   {
-    await File.AppendAllTextAsync("ContainerUpdater.log", $"--- {DateTime.Now:yyyy/MMdd HH:mm:ss} ---{Environment.NewLine}{consoleOut}{Environment.NewLine}");
+    await File.AppendAllTextAsync("ContainerUpdater.log", $"--- {DateTime.Now:yyyy/MM/dd HH:mm:ss} ---{Environment.NewLine}{consoleOut}{Environment.NewLine}");
   }
 
   if (options.Interactive)
@@ -614,46 +625,3 @@ static async Task ExecuteAsync(Options options)
   Environment.Exit(exitCode);
 }
 
-static List<ContainerInfo> SortContainersByDependencies(List<ContainerInfo> containers)
-{
-  var sorted = new List<ContainerInfo>();
-  var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-  var visiting = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-  var containerMap = containers.ToDictionary(c => c.Name, StringComparer.OrdinalIgnoreCase);
-
-  void Visit(ContainerInfo container)
-  {
-    if (visiting.Contains(container.Name))
-    {
-      Console.WriteLine($"Warning: Circular dependency detected involving container '{container.Name}'");
-      return;
-    }
-
-    if (visited.Contains(container.Name))
-    {
-      return;
-    }
-
-    visiting.Add(container.Name);
-
-    // Visit dependencies first (for stopping order)
-    foreach (var dependency in container.Dependencies)
-    {
-      if (containerMap.TryGetValue(dependency, out var depContainer))
-      {
-        Visit(depContainer);
-      }
-    }
-
-    visiting.Remove(container.Name);
-    visited.Add(container.Name);
-    sorted.Add(container);
-  }
-
-  foreach (var container in containers)
-  {
-    Visit(container);
-  }
-
-  return sorted;
-}

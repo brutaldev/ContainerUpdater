@@ -2,6 +2,7 @@
 	
 # Container Updater
 
+![Release](https://img.shields.io/github/v/release/brutaldev/ContainerUpdater)
 ![Nuget](https://img.shields.io/nuget/dt/ContainerUpdater)
 
 Automate updating Docker images and the containers that use them.

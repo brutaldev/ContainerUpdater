@@ -11,16 +11,16 @@ public static class VersionHelper
     var pattern = GeneratePatternFromVersion(referenceVersion);
 
     // Filter versions that match the pattern.
-    var matchingVersions = versions.Where(v => pattern.IsMatch(v));
+    var matchingVersions = versions.Where(v => pattern.IsMatch(v)).ToList();
 
-    if (!matchingVersions.Any())
+    if (matchingVersions.Count == 0)
     {
       return referenceVersion;
     }
 
-    if (matchingVersions.Count() == 1)
+    if (matchingVersions.Count == 1)
     {
-      return matchingVersions.ElementAt(0);
+      return matchingVersions[0];
     }
 
     // Parse and compare versions.

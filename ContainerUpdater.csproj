@@ -6,13 +6,13 @@
     <RollForward>Major</RollForward>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AssemblyVersion>1.4.0.0</AssemblyVersion>
-    <Version>1.4.0.0</Version>
+    <AssemblyVersion>1.5.0.0</AssemblyVersion>
+    <Version>1.5.0.0</Version>
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>ContainerUpdater</ToolCommandName>
     <Authors>Werner van Deventer</Authors>
-    <Copyright>Copyright (c) Werner van Deventer 2025</Copyright>
+    <Copyright>Copyright (c) Werner van Deventer 2026</Copyright>
     <Description>Automate updating Docker images and the containers that use them.</Description>
     <RepositoryUrl>https://github.com/brutaldev/ContainerUpdater</RepositoryUrl>
     <PackageProjectUrl>https://github.com/brutaldev/ContainerUpdater</PackageProjectUrl>
@@ -22,7 +22,10 @@
     <PackageOutputPath>./dist</PackageOutputPath>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <ReleaseNotes>
-      - Improve image name and tag parsing to handle cases where the digest does not contain the image name.
+      - Fixed Basic authentication header format for private registries.
+      - Fixed Watchtower label filtering when multiple containers share the same image.
+      - Fixed log file timestamp format.
+      - Improved performance when checking images with include/exclude filters.
     </ReleaseNotes>
   </PropertyGroup>
 

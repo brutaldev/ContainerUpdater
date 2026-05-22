@@ -1,7 +1,5 @@
 ﻿namespace ContainerUpdater.Models;
 
 public sealed record ContainerUpdateGroup(
-    string ImageId,
-    string ImageName,
-    string NewTag,
+    UpdateImage Image,
     List<ContainerInfo> Containers);

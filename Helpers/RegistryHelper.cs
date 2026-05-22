@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System.Collections.Concurrent;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -12,7 +13,7 @@ public static partial class RegistryHelper
   private const string FatManifestAcceptHeader = "application/vnd.docker.distribution.manifest.list.v2+json";
   private const string DockerContentDigestHeader = "Docker-Content-Digest";
 
-  private static readonly Dictionary<string, string> AuthCache = [];
+  private static readonly ConcurrentDictionary<string, string> AuthCache = new(StringComparer.OrdinalIgnoreCase);
   private static readonly HttpClient dockerRegistryClient = new();
 
   public static async Task<IEnumerable<string>> GetTagsAsync(string registry, string repository, CancellationToken cancellationToken = default)
@@ -21,34 +22,7 @@ public static partial class RegistryHelper
     var requestUrl = $"https://{registry}/v2/{repository}/tags/list?n=100";
     var cacheKey = $"{registry}/{repository}";
 
-    AuthCache.TryGetValue(cacheKey, out var authHeader);
-
-    var tagsRequest = new HttpRequestMessage(HttpMethod.Get, requestUrl);
-    tagsRequest.Headers.TryAddWithoutValidation("Accept", "application/json");
-
-    if (string.IsNullOrEmpty(authHeader))
-    {
-      var (registryUsername, registryPassword) = await CredentialHelper.GetCredentialsAsync(registry);
-      if (!string.IsNullOrEmpty(registryUsername) && !string.IsNullOrEmpty(registryPassword))
-      {
-        authHeader = "Basic" + Convert.ToBase64String(Encoding.UTF8.GetBytes($"{registryUsername}:{registryPassword}"));
-        tagsRequest.Headers.TryAddWithoutValidation("Authorization", authHeader);
-      }
-    }
-
-    var tagsResponse = await dockerRegistryClient.SendAsync(tagsRequest, cancellationToken);
-    if (tagsResponse.StatusCode == HttpStatusCode.Unauthorized)
-    {
-      authHeader = await GetAuthHeaderUsingChallengeHeaderAsync(tagsResponse.Headers, cancellationToken);
-
-      if (!string.IsNullOrEmpty(authHeader))
-      {
-        var retryTagsRequest = new HttpRequestMessage(HttpMethod.Get, requestUrl);
-        retryTagsRequest.Headers.TryAddWithoutValidation("Accept", "application/json");
-        retryTagsRequest.Headers.TryAddWithoutValidation("Authorization", authHeader);
-        tagsResponse = await dockerRegistryClient.SendAsync(retryTagsRequest, cancellationToken);
-      }
-    }
+    var (tagsResponse, authHeader) = await SendAuthenticatedAsync(HttpMethod.Get, requestUrl, "application/json", cacheKey, cancellationToken);
 
     tagsResponse.EnsureSuccessStatusCode();
 
@@ -98,35 +72,7 @@ public static partial class RegistryHelper
     var requestUrl = $"https://{registry}/v2/{repository}/manifests/{tag}";
     var cacheKey = $"{registry}/{repository}";
 
-    AuthCache.TryGetValue(cacheKey, out var authHeader);
-
-    // Attempt a regular manifest request first.
-    var manifestRequest = new HttpRequestMessage(HttpMethod.Head, requestUrl);
-    manifestRequest.Headers.TryAddWithoutValidation("Accept", RegularManifestAcceptHeader);
-
-    if (string.IsNullOrEmpty(authHeader))
-    {
-      var (registryUsername, registryPassword) = await CredentialHelper.GetCredentialsAsync(registry);
-      if (!string.IsNullOrEmpty(registryUsername) && !string.IsNullOrEmpty(registryPassword))
-      {
-        authHeader = "Basic" + Convert.ToBase64String(Encoding.UTF8.GetBytes($"{registryUsername}:{registryPassword}"));
-        manifestRequest.Headers.TryAddWithoutValidation("Authorization", authHeader);
-      }
-    }
-
-    var manifestResponse = await dockerRegistryClient.SendAsync(manifestRequest, cancellationToken);
-    if (manifestResponse.StatusCode == HttpStatusCode.Unauthorized)
-    {
-      authHeader = await GetAuthHeaderUsingChallengeHeaderAsync(manifestResponse.Headers, cancellationToken);
-
-      if (!string.IsNullOrEmpty(authHeader))
-      {
-        var retryManifestRequest = new HttpRequestMessage(HttpMethod.Head, requestUrl);
-        retryManifestRequest.Headers.TryAddWithoutValidation("Accept", RegularManifestAcceptHeader);
-        retryManifestRequest.Headers.TryAddWithoutValidation("Authorization", authHeader);
-        manifestResponse = await dockerRegistryClient.SendAsync(retryManifestRequest, cancellationToken);
-      }
-    }
+    var (manifestResponse, authHeader) = await SendAuthenticatedAsync(HttpMethod.Head, requestUrl, RegularManifestAcceptHeader, cacheKey, cancellationToken);
 
     manifestResponse.Headers.TryGetValues(DockerContentDigestHeader, out var manifestDigestHeaders);
     var manifestDigestHeader = manifestDigestHeaders?.FirstOrDefault();
@@ -154,14 +100,57 @@ public static partial class RegistryHelper
       digests.Add(fatManifestDigestHeader);
     }
 
-    AuthCache.TryAdd(cacheKey, authHeader ?? string.Empty);
-
     if (digests.Count == 0)
     {
       throw new Exception($"Could not find Docker-Content-Digest header for URL {requestUrl}");
     }
 
     return digests;
+  }
+
+  /// <summary>
+  /// Sends an authenticated HTTP request, handling the 401 Bearer challenge flow and caching the token.
+  /// </summary>
+  private static async Task<(HttpResponseMessage Response, string? AuthHeader)> SendAuthenticatedAsync(
+    HttpMethod method, string requestUrl, string acceptHeader, string cacheKey, CancellationToken cancellationToken)
+  {
+    AuthCache.TryGetValue(cacheKey, out var authHeader);
+
+    var request = new HttpRequestMessage(method, requestUrl);
+    request.Headers.TryAddWithoutValidation("Accept", acceptHeader);
+
+    if (string.IsNullOrEmpty(authHeader))
+    {
+      var (registryUsername, registryPassword) = await CredentialHelper.GetCredentialsAsync(cacheKey);
+      if (!string.IsNullOrEmpty(registryUsername) && !string.IsNullOrEmpty(registryPassword))
+      {
+        authHeader = "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes($"{registryUsername}:{registryPassword}"));
+        request.Headers.TryAddWithoutValidation("Authorization", authHeader);
+      }
+    }
+    else
+    {
+      request.Headers.TryAddWithoutValidation("Authorization", authHeader);
+    }
+
+    var response = await dockerRegistryClient.SendAsync(request, cancellationToken);
+
+    if (response.StatusCode == HttpStatusCode.Unauthorized)
+    {
+      authHeader = await GetAuthHeaderUsingChallengeHeaderAsync(response.Headers, cancellationToken);
+
+      if (!string.IsNullOrEmpty(authHeader))
+      {
+        var retryRequest = new HttpRequestMessage(method, requestUrl);
+        retryRequest.Headers.TryAddWithoutValidation("Accept", acceptHeader);
+        retryRequest.Headers.TryAddWithoutValidation("Authorization", authHeader);
+        response = await dockerRegistryClient.SendAsync(retryRequest, cancellationToken);
+      }
+    }
+
+    AuthCache.TryAdd(cacheKey, authHeader ?? string.Empty);
+
+    return (response, authHeader);
   }
 
   private static async Task<string> GetAuthHeaderUsingChallengeHeaderAsync(HttpResponseHeaders headers, CancellationToken cancellationToken)
@@ -240,3 +229,4 @@ public static partial class RegistryHelper
   [GeneratedRegex(@"rel\s*=\s*""([^""]+)""")]
   private static partial Regex LinkHeaderRelRegex();
 }
+
