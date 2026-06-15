@@ -11,7 +11,7 @@ public class Options
   public IEnumerable<string> Include { get; set; } = [];
 
   [Option('h', "host", Required = false, HelpText = "Connect to a remote Docker host instead using local named pipes.")]
-  public Uri? Host { get; set; }
+  public Uri? Host { get; set; } = GetDockerHostFromEnvironment();
 
   [Option('u', "username", Required = false, HelpText = "Connect to the docker host with the specified username.")]
   public string Username { get; set; } = string.Empty;
@@ -27,4 +27,15 @@ public class Options
 
   [Option("dry-run", Required = false, HelpText = "Check for updates and log what would happen but do not make any changes.")]
   public bool DryRun { get; set; }
+
+  private static Uri? GetDockerHostFromEnvironment()
+  {
+    var dockerHost = Environment.GetEnvironmentVariable("DOCKER_HOST");
+    if (string.IsNullOrWhiteSpace(dockerHost))
+    {
+      return null;
+    }
+
+    return new Uri(dockerHost);
+  }
 }

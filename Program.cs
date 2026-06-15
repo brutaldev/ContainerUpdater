@@ -58,6 +58,7 @@ static async Task ExecuteAsync(Options options)
   using var consoleOut = ConsoleOut.Observe();
   var connected = false;
   var exitCode = 0;
+  var dockerHost = dockerConfiguration.EndpointBaseUri.AbsoluteUri;
 
   try
   {
@@ -124,7 +125,7 @@ static async Task ExecuteAsync(Options options)
       var tagParts = repoTag.Split(':');
       var imageName = digestParts[0];
       var digest = digestParts.Length > 1 ? digestParts[1] : digestParts[0];
-      var tag = tagParts[1];
+      var tag = tagParts[1].Split('@')[0];
 
       // Some images do not have the name prefixed with the digest, we can fallback to the repository name.
       if (imageName == digest)
@@ -604,7 +605,9 @@ static async Task ExecuteAsync(Options options)
     else
     {
       Console.ForegroundColor = ConsoleColor.Yellow;
-      Console.WriteLine($"Docker engine is not running :( ({ex.Message})");
+      Console.WriteLine("Docker engine is not running :(");
+      Console.WriteLine($"Tried to connect to: {dockerHost}");
+      Console.WriteLine($"Error: {ex.Message}");
       Console.ResetColor();
 
       exitCode = 2;

@@ -6,8 +6,8 @@
     <RollForward>Major</RollForward>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AssemblyVersion>1.5.0.0</AssemblyVersion>
-    <Version>1.5.0.0</Version>
+    <AssemblyVersion>1.6.0.0</AssemblyVersion>
+    <Version>1.6.0.0</Version>
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>ContainerUpdater</ToolCommandName>
@@ -22,10 +22,8 @@
     <PackageOutputPath>./dist</PackageOutputPath>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <ReleaseNotes>
-      - Fixed Basic authentication header format for private registries.
-      - Fixed Watchtower label filtering when multiple containers share the same image.
-      - Fixed log file timestamp format.
-      - Improved performance when checking images with include/exclude filters.
+      - Support DOCKER_HOST environment variable.
+      - Fix digest lookup for image that have tags with hash appended.
     </ReleaseNotes>
   </PropertyGroup>
 
